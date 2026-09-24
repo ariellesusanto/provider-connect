@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import "./App.css";
 import { ROLES, PATIENT, DEFAULT_CONSENT, AUDIT_LOG, CONSENT_LABELS } from "./data";
 import SummaryTab from "./tabs/SummaryTab";
@@ -53,6 +53,21 @@ export default function App() {
   const [tab, setTab] = useState("summary");
   const [consent, setConsent] = useState(DEFAULT_CONSENT);
   const [auditLog, setAuditLog] = useState(AUDIT_LOG);
+  const headerRef = useRef(null);
+  // Slot in the header's top-right corner where the Break Glass button renders.
+  const [headerSlot, setHeaderSlot] = useState(null);
+
+  // Expose the sticky header's height so sticky page elements can sit just below it.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const setVar = () =>
+      document.documentElement.style.setProperty("--header-h", `${el.offsetHeight}px`);
+    setVar();
+    const ro = new ResizeObserver(setVar);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const appendAudit = (entry) => {
     const now = new Date();
@@ -99,7 +114,7 @@ export default function App() {
   return (
     <div className="app">
       {/* Header */}
-      <header className="app-header">
+      <header className="app-header" ref={headerRef}>
         <div className="header-inner">
           <div className="header-brand">
             <a className="brand-mark" href="/" aria-label="ProviderConnect home">
@@ -116,6 +131,7 @@ export default function App() {
             </div>
           </div>
           <div className="header-right">
+            <div className="header-actions" ref={setHeaderSlot}></div>
             <div className="patient-pill">
               <span className="patient-pill-label">Patient</span>
               <span className="patient-pill-divider" aria-hidden="true">/</span>
@@ -203,7 +219,7 @@ export default function App() {
         {/* Tab Content */}
         <main className="tab-content" key={tab === "summary" ? tab + role : tab}>
           {/* Provider tabs */}
-          {tab === "summary" && <SummaryTab role={role} consent={consent} onEmergencyOverride={appendAudit} />}
+          {tab === "summary" && <SummaryTab role={role} consent={consent} onEmergencyOverride={appendAudit} headerSlot={headerSlot} />}
           {tab === "compare" && <CompareTab consent={consent} />}
           {tab === "scenario" && <ScenarioTab consent={consent} />}
 

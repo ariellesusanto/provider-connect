@@ -116,7 +116,7 @@
 * { margin: 0; padding: 0; }
 
 html { -webkit-text-size-adjust: 100%; }
-html, body { overflow-x: hidden; }
+html, body { overflow-x: clip; }
 
 body {
   font-family: var(--font-sans);
@@ -1667,4 +1667,174 @@ h1, h2, h3, h4 { letter-spacing: -0.014em; font-family: var(--font-sans); font-w
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ─── Patient summary: left section menu + Break Glass corner button ─────── */
+.summary-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.summary-main { min-width: 0; position: relative; }
+
+.summary-section { scroll-margin-top: calc(var(--header-h, 76px) + 16px); }
+
+.summary-nav {
+  position: sticky;
+  top: calc(var(--header-h, 76px) + 20px);
+  max-height: calc(100vh - var(--header-h, 76px) - 40px);
+  overflow-y: auto;
+}
+
+.summary-nav-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 0 0 10px 14px;
+}
+
+.summary-nav-list {
+  list-style: none;
+  border-left: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px 8px 14px;
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  transition: color var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.summary-nav-link:hover { color: var(--ink); background: var(--card-soft); }
+
+.summary-nav-link.active {
+  color: var(--brand);
+  font-weight: 600;
+  border-left-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.summary-nav-link:focus-visible { outline: none; box-shadow: var(--ring); }
+
+.summary-nav-link.critical .summary-nav-text::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 7px;
+  border-radius: 50%;
+  background: var(--ember);
+  vertical-align: middle;
+}
+
+.summary-nav-count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-4);
+  font-feature-settings: "tnum";
+}
+
+.summary-nav-link.active .summary-nav-count { color: var(--brand); }
+
+/* Break Glass: rendered into the sticky header's top-right corner */
+.header-actions { display: flex; align-items: center; }
+.header-actions:empty { display: none; }
+
+.break-glass-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ember-2);
+  background: var(--ember-soft);
+  border: 1px solid var(--ember);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow);
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.break-glass-btn:hover { background: var(--ember); color: var(--paper); }
+.break-glass-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(178, 59, 28, 0.3); }
+
+.break-glass-btn.active { background: var(--ember); color: var(--paper); }
+.break-glass-btn.active:hover { background: var(--ember-2); }
+
+.break-glass-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--paper);
+  animation: breakGlassPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes breakGlassPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Narrow screens: the menu becomes a horizontal, sticky strip of chips */
+@media (max-width: 860px) {
+  .summary-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
+
+  .summary-nav {
+    top: var(--header-h, 76px);
+    z-index: 50;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin: 0 calc(-1 * var(--content-pad)) 16px;
+    padding: 10px var(--content-pad);
+    background: rgba(243, 241, 234, 0.94);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--rule-soft);
+    scrollbar-width: none;
+  }
+  .summary-nav::-webkit-scrollbar { display: none; }
+  .summary-nav-label { display: none; }
+  .summary-nav-list { flex-direction: row; gap: 6px; border-left: none; }
+  .summary-nav-link {
+    margin-left: 0;
+    padding: 6px 12px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-pill);
+    white-space: nowrap;
+    font-size: 12.5px;
+    background: var(--card);
+  }
+  .summary-nav-link.active { border-color: var(--brand); }
+
+  .summary-section { scroll-margin-top: calc(var(--header-h, 76px) + 70px); }
+}
+
+@media (max-width: 640px) {
+  .header-right { width: 100%; justify-content: space-between; }
+  .header-actions { order: 2; }
+  .break-glass-btn { padding: 6px 12px; font-size: 11.5px; }
 }

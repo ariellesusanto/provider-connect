@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   ROLES, PATIENT, ALLERGIES,
   getVisibleConditions, getVisibleMedications, getVisibleVisits, getVisiblePlans,
@@ -163,7 +164,7 @@ function CoordinationPanel({ role, consent }) {
   if (findings.length === 0) return null;
   const warnCount = findings.filter((f) => f.severity === "warning").length;
   return (
-    <div className="card">
+    <div className="card summary-section" id="sec-coordination">
       <div className="section-title">
         <span className="section-title-icon">&#128279;</span> Cross-Provider Coordination
         <span
@@ -239,7 +240,7 @@ function ConsentIndicator({ consent, role }) {
   );
 }
 
-export default function SummaryTab({ role, consent, onEmergencyOverride }) {
+export default function SummaryTab({ role, consent, onEmergencyOverride, headerSlot }) {
   const [feedback, setFeedback] = useState(null);
   const [flagText, setFlagText] = useState("");
   const [flagSubmitted, setFlagSubmitted] = useState(false);
@@ -257,6 +258,67 @@ export default function SummaryTab({ role, consent, onEmergencyOverride }) {
   const plans = getVisiblePlans(role, effectiveConsent);
   const aiSummarySegments = getAISummarySegments(role, effectiveConsent);
   const ri = ROLES[role];
+  const coordinationCount = getVisibleCoordinationFindings(role, effectiveConsent).length;
+
+  const sections = [
+    { id: "sec-summary", label: "AI Summary" },
+    ...(coordinationCount > 0 ? [{ id: "sec-coordination", label: "Coordination", count: coordinationCount }] : []),
+    { id: "sec-conditions", label: "Conditions", count: conditions.length },
+    { id: "sec-medications", label: "Medications", count: medications.length },
+    { id: "sec-allergies", label: "Allergies", count: ALLERGIES.length, critical: true },
+    { id: "sec-goals", label: "Patient Goals" },
+    { id: "sec-visits", label: "Recent Visits", count: visits.length },
+    { id: "sec-plans", label: "Treatment Plans", count: plans.length },
+  ];
+  const sectionIds = sections.map((sec) => sec.id).join(",");
+  const [activeSection, setActiveSection] = useState("sec-summary");
+
+  // Highlight the section currently in view in the left menu.
+  useEffect(() => {
+    const ids = sectionIds.split(",");
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header-h")) || 76;
+      const line = headerH + 120;
+      let current = ids[0];
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= line) current = id;
+      }
+      // At the very bottom of the page, the last section counts as active.
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) {
+        current = ids[ids.length - 1];
+      }
+      setActiveSection(current);
+    };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update); };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [sectionIds]);
+
+  // On narrow screens the menu is a horizontal strip: keep the active chip in view.
+  useEffect(() => {
+    const nav = document.querySelector(".summary-nav");
+    const link = nav?.querySelector(".summary-nav-link.active");
+    if (!nav || !link || nav.scrollWidth <= nav.clientWidth) return;
+    const left = link.offsetLeft - (nav.clientWidth - link.offsetWidth) / 2;
+    nav.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+  }, [activeSection]);
+
+  const jumpTo = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    setActiveSection(id);
+  };
 
   const handleEmergencyActivate = () => {
     if (emergencyReason.trim().length < 5) return;
@@ -281,8 +343,53 @@ export default function SummaryTab({ role, consent, onEmergencyOverride }) {
   };
 
   return (
-    <div>
+    <div className="summary-layout">
+      {/* Left section menu */}
+      <nav className="summary-nav" aria-label="Patient summary sections">
+        <div className="summary-nav-label">On this page</div>
+        <ol className="summary-nav-list">
+          {sections.map((sec) => (
+            <li key={sec.id}>
+              <button
+                className={`summary-nav-link${activeSection === sec.id ? " active" : ""}${sec.critical ? " critical" : ""}`}
+                onClick={() => jumpTo(sec.id)}
+                aria-current={activeSection === sec.id ? "location" : undefined}
+              >
+                <span className="summary-nav-text">{sec.label}</span>
+                {sec.count !== undefined && <span className="summary-nav-count">{sec.count}</span>}
+              </button>
+            </li>
+          ))}
+        </ol>
+      </nav>
+
+      <div className="summary-main">
+      {/* Break Glass: lives in the sticky header's top-right corner */}
+      {headerSlot && createPortal(
+        emergencyActive ? (
+          <button
+            className="break-glass-btn active"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            title="Emergency override is active. Jump to the banner to deactivate."
+          >
+            <span className="break-glass-dot" aria-hidden="true"></span>
+            Override active
+          </button>
+        ) : (
+          <button
+            className="break-glass-btn"
+            onClick={() => setShowEmergencyModal(true)}
+            title="Override consent restrictions for urgent clinical need. Fully audited."
+          >
+            <span aria-hidden="true">&#128680;</span>
+            Break Glass
+          </button>
+        ),
+        headerSlot
+      )}
+
       {/* Consent Indicator */}
+
       {!emergencyActive && <ConsentIndicator consent={consent} role={role} />}
 
       {/* Emergency Override Banner */}
@@ -309,7 +416,8 @@ export default function SummaryTab({ role, consent, onEmergencyOverride }) {
 
       {/* AI Summary with Feedback */}
       <div
-        className="card ai-summary-card"
+        className="card ai-summary-card summary-section"
+        id="sec-summary"
         style={{
           background: `linear-gradient(135deg, ${ri.bg}, #fff)`,
           borderColor: ri.color + "25",
@@ -394,19 +502,6 @@ export default function SummaryTab({ role, consent, onEmergencyOverride }) {
         </div>
       </div>
 
-      {/* Emergency Override Button */}
-      {!emergencyActive && (
-        <div className="card" style={{ padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Need emergency access?</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Override consent restrictions for urgent clinical need. Fully audited.</div>
-          </div>
-          <button className="btn btn-sm btn-red-outline" onClick={() => setShowEmergencyModal(true)}>
-            &#128680; Break Glass
-          </button>
-        </div>
-      )}
-
       {/* Emergency Modal */}
       {showEmergencyModal && (
         <div className="modal-backdrop" onClick={() => setShowEmergencyModal(false)}>
@@ -443,7 +538,7 @@ export default function SummaryTab({ role, consent, onEmergencyOverride }) {
       <CoordinationPanel role={role} consent={effectiveConsent} />
 
       {/* Active Conditions */}
-      <div className="card">
+      <div className="card summary-section" id="sec-conditions">
         <div className="section-title">
           <span className="section-title-icon">&#128203;</span> Active Conditions
         </div>
@@ -468,7 +563,7 @@ export default function SummaryTab({ role, consent, onEmergencyOverride }) {
       </div>
 
       {/* Medications */}
-      <div className="card">
+      <div className="card summary-section" id="sec-medications">
         <div className="section-title">
           <span className="section-title-icon">&#128138;</span> Current Medications
         </div>
@@ -501,7 +596,7 @@ export default function SummaryTab({ role, consent, onEmergencyOverride }) {
       </div>
 
       {/* Allergies */}
-      <div className="card">
+      <div className="card summary-section" id="sec-allergies">
         <div className="section-title">
           <span className="section-title-icon">&#128680;</span> Allergies & Contraindications
           <span className="badge badge-green" style={{ marginLeft: "auto" }}>Always Shared</span>
@@ -518,7 +613,7 @@ export default function SummaryTab({ role, consent, onEmergencyOverride }) {
       </div>
 
       {/* Patient Goals */}
-      <div className="card">
+      <div className="card summary-section" id="sec-goals">
         <div className="section-title">
           <span className="section-title-icon">&#127919;</span> Patient-Reported Goals
         </div>
@@ -528,7 +623,7 @@ export default function SummaryTab({ role, consent, onEmergencyOverride }) {
       </div>
 
       {/* Recent Visits */}
-      <div className="card">
+      <div className="card summary-section" id="sec-visits">
         <div className="section-title">
           <span className="section-title-icon">&#128197;</span> Recent Visits
         </div>
@@ -558,7 +653,7 @@ export default function SummaryTab({ role, consent, onEmergencyOverride }) {
       </div>
 
       {/* Treatment Plans */}
-      <div className="card">
+      <div className="card summary-section" id="sec-plans">
         <div className="section-title">
           <span className="section-title-icon">&#128221;</span> Treatment Plans
         </div>
@@ -579,6 +674,7 @@ export default function SummaryTab({ role, consent, onEmergencyOverride }) {
             );
           })}
         </div>
+      </div>
       </div>
     </div>
   );
